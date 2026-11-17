@@ -1,0 +1,74 @@
+name: Pacotes e release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Gerar aplicativo
+        shell: pwsh
+        run: .\gerar-windows.ps1
+      - name: Disponibilizar pacote
+        uses: actions/upload-artifact@v4
+        with:
+          name: Eudoria-Windows-x64
+          path: dist\Eudoria-Windows-x64.zip
+          if-no-files-found: error
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Testar jogo
+        shell: bash
+        run: |
+          mkdir -p build/testes
+          mapfile -d '' fontes < <(find desafio1 testes -name '*.java' -type f -print0)
+          javac --release 11 -encoding UTF-8 -d build/testes "${fontes[@]}"
+          for teste in testes.TesteJogo testes.TesteExpedicao testes.TesteArena desafio1.visual.TestePainelExpedicao; do
+            java -Djava.awt.headless=true -cp build/testes "$teste"
+          done
+      - name: Gerar aplicativo
+        shell: bash
+        run: bash gerar-linux.sh
+      - name: Disponibilizar pacote
+        uses: actions/upload-artifact@v4
+        with:
+          name: Eudoria-Linux-x64
+          path: dist/Eudoria-Linux-x64.tar.gz
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [windows, linux]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: pacotes
+          merge-multiple: true
+      - name: Publicar release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            pacotes/Eudoria-Windows-x64.zip
+            pacotes/Eudoria-Linux-x64.tar.gz
+          fail_on_unmatched_files: true
